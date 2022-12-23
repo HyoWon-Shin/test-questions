@@ -1,3 +1,5 @@
+import { format, toDate, utcToZonedTime } from "date-fns-tz";
+
 const dataDump = {
   부과내역: [
     {
@@ -342,12 +344,68 @@ const expectData = [
 // 테스트가 통과되도록 transformData를 구현하세요.
 // 라이브러리는 자유롭게 설치 및 사용 가능
 // 가산점: 처리속도, 코드 가독성
+
+const getDateTime = (str: any) => {
+  let dateStr: string = str.replace(/\./g, "-");
+  const timeZone = "Asia/Seoul";
+  const todate = toDate(dateStr);
+  const utcToZonedDate = utcToZonedTime(todate, timeZone);
+  return format(utcToZonedDate, "yyyy-MM-dd HH:mm:ssxxx", {
+    timeZone: timeZone,
+  });
+};
+
 test("데이터 변환", () => {
   console.log("start");
+  const transformData = (dumpData: any) => {
+    const data = [];
+    const 부과내역 = dumpData.부과내역;
+    부과내역.forEach((dump: any) => {
+      const 부과대상 = dump?.부과대상;
+      const 위반항목 = dump?.위반항목;
+      const 위반장소 =
+        위반항목?.indexOf("위반장소:") > -1
+          ? 위반항목?.substring(
+              위반항목.lastIndexOf("위반장소:") + 5,
+              위반항목.lastIndexOf("/위반일시:")
+            )
+          : 부과대상?.lastIndexOf("위반장소:") > -1
+          ? 부과대상?.substring(
+              부과대상.lastIndexOf("위반장소:") + 5,
+              부과대상.lastIndexOf("/위반일시:")
+            )
+          : "";
+      const 위반일시 =
+        부과대상?.indexOf("위반일시:") > -1
+          ? 부과대상?.substring(부과대상.lastIndexOf("위반일시:") + 5)
+          : 위반항목?.lastIndexOf("위반일시:") > -1
+          ? 위반항목?.substring(위반항목.lastIndexOf("위반일시:") + 5)
+          : "";
 
-  const transformData = (d) => d;
-
+      data.push({
+        전자납부번호: dump.전자납부번호,
+        부과연월일: getDateTime(dump.부과연월일),
+        납기일: getDateTime(dump.납기일),
+        단속차량: 부과대상?.substring(0, 8).replace(/ /g, ""),
+        위반장소: 위반장소.trim(),
+        위반일시: 위반일시 ? getDateTime(위반일시) : "",
+        총납부금액: Number(
+          dump?.상세내역.filter((item) => item.과목 === "합계")[0].납부금액
+        ),
+      });
+      const pushData = data.slice(-1)[0];
+      if (!pushData.단속차량) {
+        delete pushData.단속차량;
+      }
+      if (!pushData.위반장소) {
+        delete pushData.위반장소;
+      }
+      if (!pushData.위반일시) {
+        delete pushData.위반일시;
+      }
+    });
+    return data;
+  };
   expect(transformData(dataDump)).toEqual(expectData);
-
   console.log("end");
 });
